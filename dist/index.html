@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="ko">
+  <!-- 페이지 설정: 제목, 문자 인코딩, 디자인 파일 연결 -->
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Field Service Console — 반도체 장비 Incident Response</title>
+    <meta
+      name="description"
+      content="ASML DUV·EUV 노광과 포토·증착 장비의 장애를 진단하는 현장 서비스 업무 시뮬레이터"
+    />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23151e28'/%3E%3Cpath d='M8 9h16v14H8zM12 5v22M20 5v22M5 13h22M5 19h22' fill='none' stroke='%23c3f477' stroke-width='2'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!-- 상단 바: 사이트 이름, 경보음 설정, 학습 자료 버튼 -->
+    <header>
+      <a class="brand" href="./">
+        <span class="brand-icon">▥</span>
+        FIELD SERVICE
+        <span class="brand-light">CONSOLE</span>
+      </a>
+      <span class="header-description">LITHOGRAPHY · TRACK · DEPOSITION</span>
+      <div class="header-right">
+        <span class="sim-label">SIMULATED FAB ENVIRONMENT</span>
+        <button id="sound" class="quiet">소리 켜짐</button>
+        <button id="sourcesButton" class="quiet">Technical References ↗</button>
+      </div>
+    </header>
+    <main>
+      <!-- 장비 모드 선택과 훈련 안내 -->
+      <section class="page-top">
+        <div>
+          <div class="eyebrow">INCIDENT RESPONSE / EQUIPMENT SUPPORT</div>
+          <h1>장비 상태와 증거를 한 화면에서 추적합니다.</h1>
+          <p>Case 접수부터 원인 판정, 조치, 복구 검증과 서비스 리포트까지 수행합니다.</p>
+        </div>
+        <div class="mode-box">
+          <label for="mode">Asset selection</label>
+          <select id="mode">
+            <option value="DUV">ASML · TWINSCAN NXT:2000i / DUV</option>
+            <option value="EUV">ASML · TWINSCAN NXE:3600D / EUV</option>
+            <option value="TRACK">TEL · LITHIUS Pro Z / 포토 트랙</option>
+            <option value="PECVD">PECVD · 플라즈마 화학 기상 증착</option>
+            <option value="PVD">PVD · RF 마그네트론 스퍼터</option>
+          </select>
+        </div>
+      </section>
+      <!-- 선택한 장비의 제조사·모델·공개 자료는 equipment-view.js가 채웁니다. -->
+      <section
+        class="panel equipment-profile"
+        id="equipmentProfile"
+        aria-label="선택한 장비 소개"
+      ></section>
+      <!-- 공정 흐름도와 교육용 모델 안내 -->
+      <div class="process-flow" id="processFlow" aria-label="공정 내 장비의 역할"></div>
+      <div class="model-notice">
+        독립 업무 시뮬레이터 · 제품 개요는 공개 자료를 참고했으며 Case·알람·계측 한계는 가상
+        데이터입니다.
+      </div>
+      <!-- 실제 서비스 티켓처럼 Case 번호, 장비, FAB, Lot, 담당 조직과 상태를 요약합니다. -->
+      <section id="caseHeader" class="panel case-strip" aria-label="현재 서비스 티켓"></section>
+      <!-- 주요 화면: 왼쪽 시나리오 / 중앙 장비 맵 / 오른쪽 진단 -->
+      <div class="workspace">
+        <!-- 왼쪽: 장비별 오류를 고르고 수동 또는 무작위로 발생시킵니다. -->
+        <aside class="panel scenarios">
+          <div class="panel-heading">
+            <h2>Open Cases</h2>
+            <span class="muted" id="scenarioCount">04</span>
+          </div>
+          <p class="hint">접수할 Incident를 선택하세요.</p>
+          <div id="scenarioList">
+            <button class="scenario selected">
+              <small>SIM-VAC-01 / 진공 계통</small>
+              <strong>진공 도달 시간 초과</strong>
+              <span>목표 압력에 도달하지 못함</span>
+            </button>
+          </div>
+          <div class="scenario-bottom">
+            <div class="interview-launcher">
+              <button id="interviewMode" class="mode-toggle" aria-pressed="false">
+                면접 모드 · OFF
+              </button>
+              <p>답변 구성, 시간·증거 비용, 고객 대응을 함께 평가합니다.</p>
+            </div>
+            <button id="inject" class="primary">＋ 선택 Case 접수</button>
+            <button id="random" class="secondary">Unassigned Case 가져오기</button>
+            <button id="randomSession" class="secondary session-button">3-Case 랜덤 면접 시작</button>
+            <p>
+              동시에 한 Case만 처리합니다.
+              <br />
+              종료 전에는 Asset과 Incident가 고정됩니다.
+            </p>
+          </div>
+        </aside>
+        <!-- 가운데: 기능 연결도, 계측값과 시간순 이벤트 기록을 보여줍니다. -->
+        <section class="center">
+          <div class="panel equipment">
+            <div class="panel-heading">
+              <div>
+                <h2>System Topology</h2>
+                <span id="equipmentLabel" class="muted">DEP-01 / PECVD</span>
+              </div>
+              <span id="status" class="badge good">정상 · READY</span>
+            </div>
+            <!-- SVG로 그린 장비 구조도. data-part 값으로 JavaScript의 고장 계통과 연결합니다. -->
+            <div class="map-wrap">
+              <svg
+                id="equipmentMap"
+                viewBox="0 0 800 510"
+                role="img"
+                aria-label="가스 공급, RF 전원, 챔버, 로드록, 진공 펌프, 냉각기 연결 구조도"
+              >
+                <!-- defs는 반복 격자와 금속·플라즈마 색상 효과를 정의합니다. -->
+                <defs>
+                  <pattern id="grid" width="25" height="25" patternUnits="userSpaceOnUse">
+                    <path d="M 25 0 L 0 0 0 25" fill="none" stroke="#24313c" stroke-width=".6" />
+                  </pattern>
+                  <linearGradient id="metal" x2="1" y2="1">
+                    <stop stop-color="#354555" />
+                    <stop offset=".5" stop-color="#1a2733" />
+                    <stop offset="1" stop-color="#304150" />
+                  </linearGradient>
+                  <linearGradient id="plasma" x2="0" y2="1">
+                    <stop stop-color="#a997ff" stop-opacity=".7" />
+                    <stop offset="1" stop-color="#a997ff" stop-opacity=".04" />
+                  </linearGradient>
+                </defs>
+                <!-- 아래 선들은 증착 장비의 가스·전원·진공·냉각 연결 관계입니다. -->
+                <rect width="800" height="510" fill="url(#grid)" />
+                <text x="26" y="30" class="map-meta">DEP-01 / SYSTEM SCHEMATIC</text>
+                <text x="26" y="490" class="map-meta">
+                  교육용 기능 구조도 · 실제 장비 배치와 다름
+                </text>
+                <g fill="none" stroke-width="6" stroke-linejoin="round">
+                  <path class="gas-line" d="M155 150V88H390V174" stroke="#82bbb2" />
+                  <path d="M629 145H535V194H487" stroke="#ad9de2" />
+                  <path d="M459 331V407H548" stroke="#8b9cac" />
+                  <path d="M644 395V315H487" stroke="#6aa8de" />
+                  <path d="M622 395V350H475" stroke="#426e97" />
+                  <path d="M274 263H141V292" stroke="#8293a2" />
+                </g>
+                <!-- 각 .part 그룹은 클릭/키보드 선택 및 고장 위치 강조가 가능한 부품입니다. -->
+                <g
+                  class="part"
+                  data-part="gas"
+                  tabindex="0"
+                  role="button"
+                  aria-label="가스 공급 장치"
+                >
+                  <rect class="part-body" x="48" y="116" width="170" height="93" rx="8" />
+                  <rect
+                    x="62"
+                    y="133"
+                    width="37"
+                    height="54"
+                    rx="6"
+                    fill="url(#metal)"
+                    stroke="#65828a"
+                  />
+                  <path d="M74 128h14m-7 0v12" stroke="#82bbb2" stroke-width="3" />
+                  <rect
+                    x="114"
+                    y="139"
+                    width="86"
+                    height="33"
+                    rx="4"
+                    fill="#172831"
+                    stroke="#668781"
+                  />
+                  <text x="124" y="162" class="component-code">MFC-01</text>
+                  <circle class="part-led" cx="202" cy="126" r="4" />
+                  <text x="51" y="234" class="component-label">가스 공급 / MFC</text>
+                  <text x="51" y="254" class="map-meta" id="gasType">공정 가스 유량 제어</text>
+                </g>
+                <g
+                  class="part"
+                  data-part="rf"
+                  tabindex="0"
+                  role="button"
+                  aria-label="RF 전원 및 매칭 네트워크"
+                >
+                  <rect class="part-body" x="583" y="87" width="170" height="111" rx="8" />
+                  <rect x="599" y="103" width="95" height="29" rx="4" fill="#172831" />
+                  <text x="606" y="123" class="component-code">13.56 MHz</text>
+                  <path d="M600 153h138m-138 9h138m-138 9h138" stroke="#53616e" stroke-width="3" />
+                  <circle class="part-led" cx="738" cy="101" r="4" />
+                  <text x="583" y="222" class="component-label">RF 전원 / 매칭</text>
+                </g>
+                <g
+                  class="part"
+                  data-part="chamber"
+                  tabindex="0"
+                  role="button"
+                  aria-label="증착 챔버"
+                >
+                  <path
+                    class="part-body"
+                    d="M294 171L316 150H452L487 180V324L462 345H298L274 322V190Z"
+                  />
+                  <rect
+                    x="294"
+                    y="185"
+                    width="172"
+                    height="130"
+                    rx="9"
+                    fill="#101c28"
+                    stroke="#506477"
+                    stroke-width="2"
+                  />
+                  <rect
+                    id="electrode"
+                    x="311"
+                    y="193"
+                    width="139"
+                    height="15"
+                    rx="3"
+                    fill="#a7b6c0"
+                  />
+                  <path id="plasmaShape" d="M318 213H442L457 282H303Z" fill="url(#plasma)" />
+                  <path
+                    d="M323 215v10m20-10v10m20-10v10m20-10v10m20-10v10m20-10v10"
+                    stroke="#ae9de1"
+                    stroke-width="2"
+                  />
+                  <ellipse cx="380" cy="281" rx="66" ry="10" fill="#a0c4d7" />
+                  <path d="M314 282v10q66 16 132 0v-10" fill="#4e738a" />
+                  <rect x="350" y="301" width="60" height="12" rx="2" fill="#657889" />
+                  <circle class="part-led" cx="471" cy="182" r="4" />
+                  <text x="324" y="377" class="component-label">증착 챔버</text>
+                  <text x="309" y="398" class="map-meta" id="chamberType">
+                    샤워헤드 + 가열 전극
+                  </text>
+                  <circle cx="289" cy="199" r="3" fill="#93a3b2" />
+                  <circle cx="477" cy="314" r="3" fill="#93a3b2" />
+                </g>
+                <g
+                  class="part"
+                  data-part="gate"
+                  tabindex="0"
+                  role="button"
+                  aria-label="로드록 및 게이트 밸브"
+                >
+                  <rect class="part-body" x="57" y="292" width="167" height="93" rx="7" />
+                  <path
+                    d="M83 357h113M97 319h88m-74 0l35 31 28-19"
+                    fill="none"
+                    stroke="#8398aa"
+                    stroke-width="6"
+                  />
+                  <rect x="235" y="243" width="26" height="42" rx="3" fill="#637b8e" />
+                  <circle class="part-led" cx="208" cy="305" r="4" />
+                  <text x="57" y="410" class="component-label">로드록 / 게이트 밸브</text>
+                </g>
+                <g
+                  class="part"
+                  data-part="vacuum"
+                  tabindex="0"
+                  role="button"
+                  aria-label="진공 펌프"
+                >
+                  <rect class="part-body" x="516" y="382" width="95" height="64" rx="7" />
+                  <circle cx="546" cy="414" r="20" fill="#243746" stroke="#8595a2" />
+                  <path
+                    d="M546 396v36m-18-18h36m-30-13l25 26m-25 0l25-26"
+                    stroke="#788c9e"
+                    stroke-width="3"
+                  />
+                  <circle class="part-led" cx="598" cy="393" r="4" />
+                  <text x="493" y="470" class="component-label">진공 펌프</text>
+                </g>
+                <g class="part" data-part="cooling" tabindex="0" role="button" aria-label="냉각기">
+                  <rect class="part-body" x="639" y="360" width="111" height="85" rx="7" />
+                  <rect x="653" y="374" width="65" height="23" rx="3" fill="#172831" />
+                  <text x="660" y="391" class="component-code">CH-01</text>
+                  <path d="M654 410h80m-80 9h80m-80 9h80" stroke="#526b7f" stroke-width="3" />
+                  <circle class="part-led" cx="738" cy="372" r="4" />
+                  <text x="650" y="470" class="component-label">냉각기</text>
+                </g>
+              </svg>
+            </div>
+            <!-- 연결도 범례와 사용자가 선택한 부품의 역할 설명 -->
+            <div class="map-footer">
+              <span>
+                <i class="dot green"></i>
+                정상
+              </span>
+              <span>
+                <i class="dot red"></i>
+                알람 계통
+              </span>
+              <span class="push-right">부품을 누르면 역할을 확인합니다.</span>
+            </div>
+            <div id="partInfo" class="part-info">
+              챔버를 중심으로 가스·전원·진공·냉각 계통이 연결되어 있습니다.
+            </div>
+          </div>
+          <!-- 계측 카드와 로그 내용은 app.js에서 채웁니다. -->
+          <div class="metrics" id="metrics"></div>
+          <!-- 최근 계측의 상대 추세를 한 화면에 비교합니다. -->
+          <div class="panel trend-panel">
+            <div class="panel-heading compact-heading">
+              <div>
+                <h2>Process Trend</h2>
+                <span class="muted">NORMALIZED · LAST 20 MIN</span>
+              </div>
+              <span id="trendMode" class="trend-mode">LIVE BASELINE</span>
+            </div>
+            <div id="trendChart" class="trend-chart"></div>
+          </div>
+          <!-- 현재 브라우저 세션의 알람·점검·복구를 시간순으로 기록합니다. -->
+          <div class="ops-grid">
+            <div class="panel event-panel">
+              <div class="panel-heading compact-heading">
+                <h2>Event Timeline</h2>
+                <span class="muted">CURRENT CASE</span>
+              </div>
+              <div id="eventLog" class="event-log">
+                <div>
+                  <time>READY</time>
+                  <span>Case 접수 대기 중입니다.</span>
+                </div>
+              </div>
+            </div>
+            <!-- 장비별 PM 및 최근 작업 이력은 service-console.js가 채웁니다. -->
+            <div id="maintenanceHistory" class="panel history-panel"></div>
+          </div>
+        </section>
+        <!-- 체크리스트·조치·결과 화면은 현재 훈련 상태에 따라 생성합니다. -->
+        <aside class="panel diagnosis">
+          <div class="panel-heading">
+            <h2>Case Console</h2>
+            <span class="training-badge">FIELD MODE</span>
+          </div>
+          <!-- 기존 진단 조작부 위에 Fault Tree와 Escalation 상태를 표시합니다. -->
+          <section class="console-module">
+            <div class="module-title">
+              <span>Diagnostic Path</span>
+              <small>FAULT TREE</small>
+            </div>
+            <div id="faultTree" class="fault-tree"></div>
+          </section>
+          <div id="workbench">
+            <div class="empty">
+              <span class="empty-icon">⌁</span>
+              <h3>첫 번째 알람을 기다리는 중</h3>
+              <p>
+                왼쪽에서 오류를 발생시키세요.
+                <br />
+                점검으로 단서를 모으고
+                <br />
+                원인과 조치를 판단합니다.
+              </p>
+              <ol>
+                <li>알람 확인</li>
+                <li>체크리스트 점검</li>
+                <li>원인 판단과 조치</li>
+                <li>복구 검증</li>
+              </ol>
+            </div>
+          </div>
+          <section class="console-module evidence-module">
+            <div class="module-title">
+              <span>Evidence Package</span>
+              <small>ESCALATION</small>
+            </div>
+            <div id="evidencePackage"></div>
+          </section>
+        </aside>
+      </div>
+      <footer>
+        <span>SIMULATED FAB DATA · INDEPENDENT PORTFOLIO PROJECT</span>
+        <span>실장비 작업은 제조사 매뉴얼과 사업장 안전 절차를 따릅니다.</span>
+      </footer>
+    </main>
+    <!-- 학습 자료 팝업. 링크 목록은 app.js의 sources 데이터로 생성합니다. -->
+    <dialog id="sources">
+      <div class="dialog-head">
+        <h2>장비 원리와 학습 자료</h2>
+        <button id="closeSources" class="quiet">닫기 ×</button>
+      </div>
+      <p>
+        제조사의 공개 자료를 바탕으로 구성한 교육용 모델입니다. 수치, 알람 코드, 개별 고장 사례와
+        복구 판정은 이 시뮬레이터의 가상 설정입니다.
+      </p>
+      <div id="sourceLinks"></div>
+    </dialog>
+    <!-- Case 종료 후 원인·조치·검증 내용을 서비스 보고서 형식으로 확인합니다. -->
+    <dialog id="report" class="report-dialog">
+      <div class="dialog-head">
+        <h2>Field Service Report</h2>
+        <button id="closeReport" class="quiet">닫기 ×</button>
+      </div>
+      <pre id="reportBody"></pre>
+      <button id="downloadReport" class="primary">리포트 저장 (.txt)</button>
+    </dialog>
+    <!-- 데이터 → 장비 화면 → 공통 동작 순서로 읽어야 서로의 전역 값을 사용할 수 있습니다. -->
+    <script src="equipment-data.js"></script>
+    <script src="equipment-view.js"></script>
+    <script src="service-console.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
+
